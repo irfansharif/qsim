@@ -5,3 +5,4 @@ authors = ["irfan sharif <irfanmahmoudsharif@gmail.com>"]
 
 [dependencies]
 getopts = "0.2"
+rand = "0.3"
