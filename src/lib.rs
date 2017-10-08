@@ -41,15 +41,18 @@ struct PacketGenerator<'a> {
     last_gen: u32,
     // Ticks till next packet is generated.
     till_next: u32,
+    // The "length" of time of one tick
+    time_delta: f64,
     tg: &'a EventGenerator,
 }
 
 impl<'a> PacketGenerator<'a> {
-    fn new(tg: &EventGenerator) -> PacketGenerator {
+    fn new(tg: &EventGenerator, time_delta: f64) -> PacketGenerator {
         PacketGenerator {
             last_gen: 0,
             till_next: 0,
             tg: tg,
+            time_delta: time_delta,
         }
     }
 
@@ -58,7 +61,7 @@ impl<'a> PacketGenerator<'a> {
     fn next_packet(&mut self, time: u32) -> Option<Packet> {
         if time - self.last_gen == self.till_next {
             self.last_gen = time;
-            self.till_next = self.tg.next_event(1e6);
+            self.till_next = self.tg.next_event(self.time_delta);
             Some(Packet(time))
         } else {
             None
@@ -94,7 +97,7 @@ mod tests {
     #[test]
     fn test_packet_generator() {
         let tg = TestGenerator(5);
-        let mut pg = PacketGenerator::new(&tg);
+        let mut pg = PacketGenerator::new(&tg, 1e6);
         let mut packet = pg.next_packet(0);
         assert_eq!(packet.expect("invalid value").0, 0);
         assert_eq!(pg.last_gen, 0);
