@@ -3,6 +3,14 @@ name = "qsim"
 version = "0.1.0"
 authors = ["irfan sharif <irfanmahmoudsharif@gmail.com>"]
 
+[lib]
+name = "queue_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "qsim"
+path = "src/main.rs"
+
 [dependencies]
 getopts = "0.2"
 rand = "0.3"
