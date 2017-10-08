@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["irfan sharif <irfanmahmoudsharif@gmail.com>"]
 
 [lib]
-name = "queue_lib"
+name = "qlib"
 path = "src/lib.rs"
 
 [[bin]]
