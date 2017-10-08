@@ -3,12 +3,12 @@ extern crate getopts;
 use getopts::Options;
 use std::env;
 
-fn print_usage(program: &str, opts: Options) {
+fn print_usage(program: &str, opts: &Options) {
     let brief = format!("Usage: {} [options]", program);
     print!("{}", opts.usage(&brief));
 }
 
-fn parse_params(matches: getopts::Matches) -> (i32, i32, i32, i32) {
+fn parse_params(matches: &getopts::Matches) -> (i32, i32, i32, i32) {
     let a = match matches.opt_str("a") {
         Some(x) => x.parse::<i32>().unwrap(),
         None => 10,
@@ -26,7 +26,7 @@ fn parse_params(matches: getopts::Matches) -> (i32, i32, i32, i32) {
         None => 20,
     };
 
-    return (a, l, c, t);
+    (a, l, c, t)
 }
 
 fn main() {
@@ -63,14 +63,14 @@ fn main() {
         Ok(m) => m,
         Err(f) => {
             println!("{}: illegal usage -- {}", program, f.to_string());
-            std::process::exit(1);
+            std::process::exit(1)
         }
     };
 
     if matches.opt_present("h") {
-        print_usage(&program, opts);
+        print_usage(&program, &opts);
         return;
     }
 
-    let (avg, len, stime, ticks) = parse_params(matches);
+    let (_avg, _len, _stime, _ticks) = parse_params(&matches);
 }
