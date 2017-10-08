@@ -1,7 +1,7 @@
 use generators::Generator;
 
 // Packet holds the value of the time in ticks that it was generated at.
-struct Packet(u32);
+pub struct Packet(pub u32);
 
 // Client generates packets according as per the provided generators::Generator.
 #[allow(dead_code)]
