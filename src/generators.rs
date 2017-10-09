@@ -6,8 +6,9 @@ use self::rand::distributions::{Exp, IndependentSample};
 // used. The underlying RNG distribution, if configured (consider λ in an exponentially distributed
 // generator for e.g.), should map to an events/s parameter.
 pub trait Generator {
-    // next_event returns an u32 integer corresponding to how many discrete time units of the specified
-    // resolution (1e6 for a µs scale for e.g.) would need to pass until the next such event.
+    // next_event returns an u32 integer corresponding to how many discrete time units of the
+    // specified resolution (1e6 for a µs scale for e.g.) would need to pass until
+    // the next such event.
     //
     // NB: If the resolution is too course (1 for e.g. corresponding to a 1s resolution), the
     // return value might be 0, this just means we've potentially lost useful information due to
