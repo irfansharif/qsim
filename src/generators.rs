@@ -54,7 +54,7 @@ impl Deterministic {
 impl Generator for Deterministic {
     #[allow(dead_code)]
     fn next_event(&self, resolution: f64) -> u32 {
-        (resolution / self.rate as f64) as u32
+        (resolution / f64::from(self.rate)) as u32
     }
 }
 

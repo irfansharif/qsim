@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use simulators::Packet;
 
 // Consumer stores packets in a queue and processes them
+#[allow(dead_code)]
 pub struct Consumer {
     queue: VecDeque<Packet>,
     buffer_limit: Option<usize>,
@@ -11,12 +12,15 @@ pub struct Consumer {
 
 #[derive(Debug, PartialEq)]
 pub enum State {
+    #[allow(dead_code)]
     Idle,
     // Processing holds the time that the consumer will be in processing till
+    #[allow(dead_code)]
     Processing(u32),
 }
 
 impl Consumer {
+    #[allow(dead_code)]
     fn new(buffer_limit: Option<usize>, service_time: u32) -> Consumer {
         Consumer {
             queue: VecDeque::new(),
@@ -26,6 +30,7 @@ impl Consumer {
         }
     }
 
+    #[allow(dead_code)]
     fn enqueue(&mut self, packet: Packet) -> bool {
         match self.buffer_limit {
             Some(size) => {
@@ -44,6 +49,7 @@ impl Consumer {
         }
     }
 
+    #[allow(dead_code)]
     fn consume(&mut self, time: u32) -> Option<Packet> {
         match self.state {
             State::Idle => {
