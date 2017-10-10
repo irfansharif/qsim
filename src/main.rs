@@ -8,9 +8,9 @@ use qlib::simulators::*;
 use stats::OnlineStats;
 use std::env;
 
-const DEFAULT_RATE: u32 = 10000;
+const DEFAULT_RATE: u32 = 10_000;
 const DEFAULT_PSIZE: u32 = 1;
-const DEFAULT_PSPEED: u32 = 10000;
+const DEFAULT_PSPEED: u32 = 10_000;
 const DEFAULT_DURATION: u32 = 5;
 const DEFAULT_QLIMIT: Option<usize> = None;
 
@@ -110,7 +110,6 @@ fn main() {
     let resolution = 1e6;
     let (rate, psize, pspeed, duration, qlimit) = parse_params(&matches);
 
-    println!();
     println!("Simulation configuration:");
     println!("\t Rate:                  {} packets/s", rate);
     println!("\t Packet size:           {} bits", psize);

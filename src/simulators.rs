@@ -2,10 +2,8 @@ use std::collections::VecDeque;
 use generators::Generator;
 
 // Packet holds the value of the time in ticks that it was generated at.
-#[derive(Debug)]
 pub struct Packet(pub u32);
 
-#[derive(Debug)]
 pub struct ClientStatistics {
     pub packets_generated: u32,
 }
@@ -16,7 +14,6 @@ impl ClientStatistics {
     }
 }
 // Client generates packets according as per the parametrized generators::Generator.
-#[allow(dead_code)]
 pub struct Client<G: Generator> {
     // TODO(irfansharif): Update comments.
     resolution: f64,
@@ -27,7 +24,6 @@ pub struct Client<G: Generator> {
 
 // TODO(irfansharif): Add comments.
 impl<G: Generator> Client<G> {
-    #[allow(dead_code)]
     pub fn new(generator: G, resolution: f64) -> Client<G> {
         Client {
             ticker: generator.next_event(resolution),
@@ -37,7 +33,6 @@ impl<G: Generator> Client<G> {
         }
     }
 
-    #[allow(dead_code)]
     pub fn tick(&mut self) -> bool {
         // TODO(irfansharif): Resolution mismatch; no possibility of generating multiple packets.
         if self.ticker == 0 {
@@ -57,7 +52,6 @@ impl<G: Generator> Client<G> {
     }
 }
 
-#[derive(Debug)]
 pub struct ServerStatistics {
     pub packets_processed: u32,
     pub packets_dropped: u32,
@@ -75,7 +69,6 @@ impl ServerStatistics {
 }
 
 // Server stores packets in a queue and processes them.
-#[allow(dead_code)]
 pub struct Server<G: Generator> {
     queue: VecDeque<Packet>,
     buffer_limit: Option<usize>,
@@ -87,7 +80,6 @@ pub struct Server<G: Generator> {
 }
 
 impl<G: Generator> Server<G> {
-    #[allow(dead_code)]
     pub fn new(generator: G, resolution: f64, buffer_limit: Option<usize>) -> Server<G> {
         Server {
             queue: VecDeque::new(),
@@ -99,7 +91,6 @@ impl<G: Generator> Server<G> {
         }
     }
 
-    #[allow(dead_code)]
     pub fn enqueue(&mut self, packet: Packet) {
         match self.buffer_limit {
             Some(limit) => {
@@ -117,7 +108,6 @@ impl<G: Generator> Server<G> {
     }
 
     // TODO(irfansharif): Comment.
-    #[allow(dead_code)]
     pub fn tick(&mut self) -> Option<Packet> {
         if self.ticker == 0 {
             self.ticker = self.generator.next_event(self.resolution);
@@ -188,5 +178,21 @@ mod tests {
         s.tick();
         assert_eq!(s.statistics.packets_processed, 1);
         assert_eq!(s.statistics.packets_dropped, 1);
+    }
+
+    #[test]
+    fn server_idle_count() {
+        let mut s = Server::new(Deterministic::new(1.0), 1.0, Some(1));
+
+        s.tick();
+        assert_eq!(s.statistics.idle_count, 1);
+
+        s.tick();
+        assert_eq!(s.statistics.idle_count, 2);
+
+        s.enqueue(Packet(0));
+        s.tick();
+        assert_eq!(s.statistics.idle_count, 2);
+        assert_eq!(s.statistics.packets_processed, 1);
     }
 }
