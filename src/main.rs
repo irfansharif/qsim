@@ -1,64 +1,99 @@
+extern crate qlib;
 extern crate getopts;
+extern crate stats;
 
 use getopts::Options;
+use qlib::generators::*;
+use qlib::simulators::*;
+use stats::OnlineStats;
 use std::env;
+
+const DEFAULT_RATE: u32 = 10_000;
+const DEFAULT_PSIZE: u32 = 1;
+const DEFAULT_PSPEED: u32 = 10_000;
+const DEFAULT_DURATION: u32 = 5;
+const DEFAULT_QLIMIT: Option<usize> = None;
+
+fn construct_options() -> Options {
+    let mut opts = Options::new();
+    opts.optflag("h", "help", "Display this message");
+    opts.optopt(
+        "",
+        "rate",
+        &format!(
+            "Average number of generated packets/s (def: {})",
+            DEFAULT_RATE
+        ),
+        "NUM",
+    );
+    opts.optopt(
+        "",
+        "psize",
+        &format!("Packet size; bits (def: {})", DEFAULT_PSIZE),
+        "NUM",
+    );
+    opts.optopt(
+        "",
+        "pspeed",
+        &format!("Packet processing speed; bits/s (def: {})", DEFAULT_PSPEED),
+        "NUM",
+    );
+    opts.optopt(
+        "",
+        "duration",
+        &format!(
+            "Duration of simulation; seconds (def: {})",
+            DEFAULT_DURATION
+        ),
+        "NUM",
+    );
+    opts.optopt(
+        "",
+        "qlimit",
+        &format!(
+            "Limit on of the buffer queue length; int (def: {:?})",
+            DEFAULT_QLIMIT
+        ),
+        "NUM",
+    );
+    opts
+}
+
+fn parse_params(matches: &getopts::Matches) -> (u32, u32, u32, u32, Option<usize>) {
+    let rate = match matches.opt_str("rate") {
+        Some(x) => x.parse::<u32>().unwrap(),
+        None => DEFAULT_RATE,
+    };
+    let psize = match matches.opt_str("psize") {
+        Some(x) => x.parse::<u32>().unwrap(),
+        None => DEFAULT_PSIZE,
+    };
+    let pspeed = match matches.opt_str("pspeed") {
+        Some(x) => x.parse::<u32>().unwrap(),
+        None => DEFAULT_PSPEED,
+    };
+    let duration = match matches.opt_str("duration") {
+        Some(x) => x.parse::<u32>().unwrap(),
+        None => DEFAULT_DURATION,
+    };
+    let qlimit = match matches.opt_str("qlimit") {
+        Some(x) => Some(x.parse::<u32>().unwrap() as usize),
+        None => DEFAULT_QLIMIT,
+    };
+
+    (rate, psize, pspeed, duration, qlimit)
+}
 
 fn print_usage(program: &str, opts: &Options) {
     let brief = format!("Usage: {} [options]", program);
     print!("{}", opts.usage(&brief));
 }
 
-fn parse_params(matches: &getopts::Matches) -> (i32, i32, i32, i32) {
-    let a = match matches.opt_str("a") {
-        Some(x) => x.parse::<i32>().unwrap(),
-        None => 10,
-    };
-    let l = match matches.opt_str("l") {
-        Some(x) => x.parse::<i32>().unwrap(),
-        None => 2,
-    };
-    let c = match matches.opt_str("c") {
-        Some(x) => x.parse::<i32>().unwrap(),
-        None => 2,
-    };
-    let t = match matches.opt_str("t") {
-        Some(x) => x.parse::<i32>().unwrap(),
-        None => 20,
-    };
-
-    (a, l, c, t)
-}
-
 fn main() {
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
 
-    let mut opts = Options::new();
-    opts.optflag("h", "help", "Display this message");
-    opts.optopt(
-        "a",
-        "avg",
-        &format!("Average number of generated packets/s (def: {})", 10),
-        "NUM",
-    );
-    opts.optopt(
-        "l",
-        "len",
-        &format!("Packet length; bits (def: {})", 2),
-        "NUM",
-    );
-    opts.optopt(
-        "c",
-        "stime",
-        &format!("Packet service time; bits/s (def: {})", 2),
-        "NUM",
-    );
-    opts.optopt(
-        "t",
-        "ticks",
-        &format!("Duration of simulation; TICKS (def: {})", 20),
-        "NUM",
-    );
+    let opts = construct_options();
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
@@ -72,5 +107,73 @@ fn main() {
         return;
     }
 
-    let (_avg, _len, _stime, _ticks) = parse_params(&matches);
+    let resolution = 1e6;
+    let (rate, psize, pspeed, duration, qlimit) = parse_params(&matches);
+
+    println!("Simulation configuration:");
+    println!("\t Rate:                  {} packets/s", rate);
+    println!("\t Packet size:           {} bits", psize);
+    println!("\t Server speed:          {} bits/s", pspeed);
+    println!("\t Simulation time:       {}s", duration);
+    println!("\t Resolution:            1µs");
+    println!("\t Queue size limit:      {:?}", qlimit);
+    println!();
+
+    let ticks = duration * resolution as u32;
+
+    let mut client = Client::new(Markov::new(f64::from(rate)), resolution);
+    let mut server = Server::new(
+        Deterministic::new(f64::from(pspeed / psize)),
+        resolution,
+        qlimit,
+    );
+    let mut pstats = OnlineStats::new();
+    let mut qstats = OnlineStats::new();
+
+    for i in 0..ticks {
+        if i % 100 == 0 {
+            // We periodically poll the server's buffer utilization to compute an average over
+            // time.
+            qstats.add(server.qlen());
+        }
+
+        if client.tick() {
+            server.enqueue(Packet(i))
+        }
+        if let Some(p) = server.tick() {
+            // We record the time it took for the processed packet to get processed.
+            pstats.add(f64::from(i - p.0) / resolution);
+        }
+    }
+
+    let cstats = client.statistics;
+    let sstats = server.statistics;
+
+    println!("Simulation results:");
+    println!(
+        "\t Average sojourn time:        {:.4} +/- {:.4} seconds",
+        pstats.mean(),
+        pstats.stddev()
+    );
+    println!(
+        "\t Average # of queued packets: {:.2} +/- {:.2} packets",
+        qstats.mean(),
+        qstats.stddev()
+    );
+    println!(
+        "\t Packets generated:           {} packets",
+        cstats.packets_generated
+    );
+    println!(
+        "\t Packets processed:           {} packets",
+        sstats.packets_processed
+    );
+    println!(
+        "\t Packets droppped:            {} packets",
+        sstats.packets_dropped
+    );
+    println!(
+        "\t Server idle proportion:      {:.2}%",
+        f64::from(sstats.idle_count) / f64::from(sstats.idle_count + sstats.packets_processed)
+    );
 }

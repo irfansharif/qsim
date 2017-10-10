@@ -20,41 +20,35 @@ pub trait Generator {
 
 // generators::Markov generates events where the interarrival time between subsequent events is
 // dictated by an exponential distribution.
-#[allow(dead_code)]
 pub struct Markov {
     exp: Exp,
 }
 
 impl Markov {
-    #[allow(dead_code)]
     pub fn new(lambda: f64) -> Markov {
         Markov { exp: Exp::new(lambda) }
     }
 }
 
 impl Generator for Markov {
-    #[allow(dead_code)]
     fn next_event(&self, resolution: f64) -> u32 {
         (self.exp.ind_sample(&mut rand::thread_rng()) * resolution) as u32
     }
 }
 
-#[allow(dead_code)]
 pub struct Deterministic {
-    rate: u32,
+    rate: f64,
 }
 
 impl Deterministic {
-    #[allow(dead_code)]
-    pub fn new(rate: u32) -> Deterministic {
+    pub fn new(rate: f64) -> Deterministic {
         Deterministic { rate: rate }
     }
 }
 
 impl Generator for Deterministic {
-    #[allow(dead_code)]
     fn next_event(&self, resolution: f64) -> u32 {
-        (resolution / self.rate as f64) as u32
+        (resolution / self.rate) as u32
     }
 }
 
@@ -78,11 +72,11 @@ mod tests {
 
     #[test]
     fn generate_deterministic_events() {
-        let dg = Deterministic::new(1000);
+        let dg = Deterministic::new(1000.0);
         let mut events = vec![];
         for _ in 0..5 {
             events.push(dg.next_event(1e6));
         }
-        assert_eq!(events, vec![1000, 1000, 1000, 1000, 1000]);
+        assert_eq!(events, vec![1000; 5]);
     }
 }
