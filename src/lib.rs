@@ -1,3 +1,2 @@
-mod consumers;
-mod generators;
-mod simulators;
+pub mod generators;
+pub mod simulators;
