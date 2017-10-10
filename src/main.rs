@@ -132,6 +132,8 @@ fn main() {
 
     for i in 0..ticks {
         if i % 100 == 0 {
+            // We periodically poll the server's buffer utilization to compute an average over
+            // time.
             qstats.add(server.qlen());
         }
 
@@ -139,6 +141,7 @@ fn main() {
             server.enqueue(Packet(i))
         }
         if let Some(p) = server.tick() {
+            // We record the time it took for the processed packet to get processed.
             pstats.add(f64::from(i - p.0) / resolution);
         }
     }
