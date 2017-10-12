@@ -1,8 +1,12 @@
 use std::collections::VecDeque;
 use generators::Generator;
 
-// Packet holds the value of the time unit that it was generated at.
-pub struct Packet(pub u32);
+// Packet holds the value of the time unit that it was generated at, and its length.
+#[derive(Clone)]
+pub struct Packet {
+    pub time_generated: u32,
+    pub length: u32,
+}
 
 // ClientStatistics is the set of statistics we care about post-simulation as far as the client is
 // concerned.
@@ -80,29 +84,29 @@ impl ServerStatistics {
     }
 }
 
-// Server stores packets in a queue and processes them. See comment on struct Client for the used
-// ticker pattern. Similarly we maintain server statistics as the server moves through the
-// simulation.
-pub struct Server<G: Generator> {
+// Server stores packets in a queue and processes them.
+pub struct Server {
     queue: VecDeque<Packet>,
     buffer_limit: Option<usize>,
-    ticker: u32,
     resolution: f64,
-    generator: G,
     pub statistics: ServerStatistics,
+    // Processing variables
+    pspeed: f64,
+    curr_packet: Option<Packet>,
+    bits_processed: f64,
 }
 
-impl<G: Generator> Server<G> {
-    // Server::new returns a server with the specified buffer limit, if any. We also set seed the
-    // ticker using the provided generator as done so in Client::new.
-    pub fn new(generator: G, resolution: f64, buffer_limit: Option<usize>) -> Server<G> {
+impl Server {
+    // Server::new returns a server with the specified buffer limit, if any.
+    pub fn new(resolution: f64, pspeed: f64, buffer_limit: Option<usize>) -> Server {
         Server {
             queue: VecDeque::new(),
             buffer_limit: buffer_limit,
             resolution: resolution,
-            ticker: generator.next_event(resolution),
             statistics: ServerStatistics::new(),
-            generator: generator,
+            pspeed: pspeed,
+            curr_packet: None,
+            bits_processed: 0.0,
         }
     }
 
@@ -124,34 +128,38 @@ impl<G: Generator> Server<G> {
         }
     }
 
-    // See comment above Client.tick for the use of the tick pattern. The return value here, if not
-    // None, is the packet that has finished being processed.
-    //
-    // The server operates via polling essentially, we process an entire packet each time the
-    // ticker returns to zero, if any. If the queue is empty this means the server is idle for that
-    // time duration and is recorded so internally.
-    pub fn tick(&mut self) -> Option<Packet> {
-        if self.ticker == 0 {
-            self.ticker = self.generator.next_event(self.resolution);
-            let packet = self.queue.pop_front();
-            match packet {
-                Some(_) => self.statistics.packets_processed += 1,
-                None => self.statistics.idle_count += 1,
-            }
-            return packet;
-        }
+    // Server.process checks to see if a packet is currently being processed, and if so,
+    // increments Server.bits_processed, and if the resulting sum is equal to the bits
+    // in the packet, then it returns the packet and resets the state of Server.
 
-        self.ticker -= 1;
-        if self.ticker == 0 {
-            self.ticker = self.generator.next_event(self.resolution);
-            let packet = self.queue.pop_front();
-            match packet {
-                Some(_) => self.statistics.packets_processed += 1,
-                None => self.statistics.idle_count += 1,
+    pub fn process(&mut self) -> Option<Packet> {
+        match self.curr_packet.clone() {
+            Some(p) => {
+                self.bits_processed += self.pspeed / self.resolution;
+                if self.bits_processed as u32 == p.length {
+                    self.curr_packet = None;
+                    self.bits_processed = 0.0;
+                    self.statistics.packets_processed += 1;
+                    Some(p)
+                } else {
+                    None
+                }
             }
-            packet
-        } else {
-            None
+            None => {
+                if let Some(p) = self.queue.pop_front() {
+                    self.curr_packet = Some(p.clone());
+                    self.bits_processed += self.pspeed / self.resolution;
+                    if self.bits_processed as u32 == p.length {
+                        self.curr_packet = None;
+                        self.bits_processed = 0.0;
+                        self.statistics.packets_processed += 1;
+                        return Some(p);
+                    }
+                } else {
+                    self.statistics.idle_count += 1;
+                }
+                None
+            }
         }
     }
 
@@ -177,45 +185,55 @@ mod tests {
 
     #[test]
     fn server_packet_delivery() {
-        let mut s = Server::new(Deterministic::new(0.5), 1.0, None);
-        s.enqueue(Packet(0));
-
-        s.tick();
-        assert_eq!(s.statistics.packets_processed, 0);
-
-        s.tick();
+        let mut s = Server::new(1.0, 0.5, None);
+        s.enqueue(Packet {
+            time_generated: 0,
+            length: 1,
+        });
+        s.enqueue(Packet {
+            time_generated: 0,
+            length: 1,
+        });
+        s.process();
+        s.process();
         assert_eq!(s.statistics.packets_processed, 1);
-
-        s.tick();
-        assert_eq!(s.statistics.packets_processed, 1);
-
-        s.tick();
-        assert_eq!(s.statistics.packets_processed, 1);
+        s.process();
+        s.process();
+        assert_eq!(s.statistics.packets_processed, 2);
     }
 
     #[test]
     fn server_packet_dropped() {
-        let mut s = Server::new(Deterministic::new(1.0), 1.0, Some(1));
-        s.enqueue(Packet(0));
-        s.enqueue(Packet(0));
+        let mut s = Server::new(1.0, 1.0, Some(1));
+        s.enqueue(Packet {
+            time_generated: 0,
+            length: 1,
+        });
+        s.enqueue(Packet {
+            time_generated: 0,
+            length: 1,
+        });
 
-        s.tick();
+        s.process();
         assert_eq!(s.statistics.packets_processed, 1);
         assert_eq!(s.statistics.packets_dropped, 1);
     }
 
     #[test]
     fn server_idle_count() {
-        let mut s = Server::new(Deterministic::new(1.0), 1.0, Some(1));
+        let mut s = Server::new(1.0, 1.0, Some(1));
 
-        s.tick();
+        s.process();
         assert_eq!(s.statistics.idle_count, 1);
 
-        s.tick();
+        s.process();
         assert_eq!(s.statistics.idle_count, 2);
 
-        s.enqueue(Packet(0));
-        s.tick();
+        s.enqueue(Packet {
+            time_generated: 0,
+            length: 1,
+        });
+        s.process();
         assert_eq!(s.statistics.idle_count, 2);
         assert_eq!(s.statistics.packets_processed, 1);
     }
