@@ -145,7 +145,7 @@ fn main() {
                 length: psize,
             });
         }
-        if let Some(p) = server.process() {
+        if let Some(p) = server.tick() {
             // We record the time it took for the processed packet to get processed.
             pstats.add(f64::from(i - p.time_generated) / resolution);
         }
@@ -186,7 +186,7 @@ fn main() {
     }
     println!(
         "\t Server idle proportion:            {:.2}%",
-        f64::from(sstats.idle_count) / f64::from(ticks) * 100.0
+        f64::from(sstats.idle_count) / f64::from(sstats.idle_count + sstats.process_count) * 100.0
     );
     println!("\t Packets leftover in queue:         {}", leftovers);
 }

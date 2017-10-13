@@ -72,6 +72,7 @@ pub struct ServerStatistics {
     pub packets_processed: u32,
     pub packets_dropped: u32,
     pub idle_count: u32,
+    pub process_count: u32,
 }
 
 impl ServerStatistics {
@@ -80,6 +81,7 @@ impl ServerStatistics {
             packets_processed: 0,
             packets_dropped: 0,
             idle_count: 0,
+            process_count: 0,
         }
     }
 }
@@ -128,18 +130,18 @@ impl Server {
         }
     }
 
-    // Server.process checks to see if a packet is currently being processed, and if so,
+    // Server.tick checks to see if a packet is currently being processed, and if so,
     // increments Server.bits_processed, and if the resulting sum is equal to the bits
     // in the packet, then it returns the packet and resets the state of Server.
-
-    pub fn process(&mut self) -> Option<Packet> {
+    pub fn tick(&mut self) -> Option<Packet> {
         match self.curr_packet.clone() {
             Some(p) => {
                 self.bits_processed += self.pspeed / self.resolution;
-                if self.bits_processed as u32 == p.length {
+                if self.bits_processed as u32 >= p.length {
                     self.curr_packet = None;
                     self.bits_processed = 0.0;
                     self.statistics.packets_processed += 1;
+                    self.statistics.process_count += 1;
                     Some(p)
                 } else {
                     None
@@ -149,10 +151,11 @@ impl Server {
                 if let Some(p) = self.queue.pop_front() {
                     self.curr_packet = Some(p.clone());
                     self.bits_processed += self.pspeed / self.resolution;
-                    if self.bits_processed as u32 == p.length {
+                    if self.bits_processed as u32 >= p.length {
                         self.curr_packet = None;
                         self.bits_processed = 0.0;
                         self.statistics.packets_processed += 1;
+                        self.statistics.process_count += 1;
                         return Some(p);
                     }
                 } else {
@@ -194,11 +197,11 @@ mod tests {
             time_generated: 0,
             length: 1,
         });
-        s.process();
-        s.process();
+        s.tick();
+        s.tick();
         assert_eq!(s.statistics.packets_processed, 1);
-        s.process();
-        s.process();
+        s.tick();
+        s.tick();
         assert_eq!(s.statistics.packets_processed, 2);
     }
 
@@ -214,7 +217,7 @@ mod tests {
             length: 1,
         });
 
-        s.process();
+        s.tick();
         assert_eq!(s.statistics.packets_processed, 1);
         assert_eq!(s.statistics.packets_dropped, 1);
     }
@@ -223,17 +226,17 @@ mod tests {
     fn server_idle_count() {
         let mut s = Server::new(1.0, 1.0, Some(1));
 
-        s.process();
+        s.tick();
         assert_eq!(s.statistics.idle_count, 1);
 
-        s.process();
+        s.tick();
         assert_eq!(s.statistics.idle_count, 2);
 
         s.enqueue(Packet {
             time_generated: 0,
             length: 1,
         });
-        s.process();
+        s.tick();
         assert_eq!(s.statistics.idle_count, 2);
         assert_eq!(s.statistics.packets_processed, 1);
     }
