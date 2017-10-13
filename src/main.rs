@@ -116,64 +116,77 @@ fn main() {
     println!("\t Server speed:          {} bits/s", pspeed);
     println!("\t Simulation time:       {}s", duration);
     println!("\t Resolution:            1µs");
-    println!("\t Queue size limit:      {:?}", qlimit);
+    if qlimit.is_some() {
+        println!(
+            "\t Queue size limit:      {}",
+            qlimit.expect("Invalid queue size input")
+        );
+    }
+    println!();
+    println!(
+        "\t Ticks per packet:      {}",
+        f64::from(psize) / f64::from(pspeed) * resolution
+    );
     println!();
 
     let ticks = duration * resolution as u32;
 
     let mut client = Client::new(Markov::new(f64::from(rate)), resolution);
-    let mut server = Server::new(
-        Deterministic::new(f64::from(pspeed / psize)),
-        resolution,
-        qlimit,
-    );
+    let mut server = Server::new(resolution, f64::from(pspeed), qlimit);
     let mut pstats = OnlineStats::new();
     let mut qstats = OnlineStats::new();
 
     for i in 0..ticks {
-        if i % 100 == 0 {
-            // We periodically poll the server's buffer utilization to compute an average over
-            // time.
-            qstats.add(server.qlen());
-        }
+        qstats.add(server.qlen());
 
         if client.tick() {
-            server.enqueue(Packet(i))
+            server.enqueue(Packet {
+                time_generated: i,
+                length: psize,
+            });
         }
         if let Some(p) = server.tick() {
             // We record the time it took for the processed packet to get processed.
-            pstats.add(f64::from(i - p.0) / resolution);
+            pstats.add(f64::from(i - p.time_generated) / resolution);
         }
     }
 
+    let leftovers = server.qlen();
     let cstats = client.statistics;
     let sstats = server.statistics;
 
     println!("Simulation results:");
     println!(
-        "\t Average sojourn time:        {:.4} +/- {:.4} seconds",
+        "\t Average sojourn time:              {:.4} +/- {:.4} seconds",
         pstats.mean(),
         pstats.stddev()
     );
     println!(
-        "\t Average # of queued packets: {:.2} +/- {:.2} packets",
+        "\t Average # of queued packets:       {:.2} +/- {:.2} packets",
         qstats.mean(),
         qstats.stddev()
     );
     println!(
-        "\t Packets generated:           {} packets",
+        "\t Packets generated:                 {} packets",
         cstats.packets_generated
     );
     println!(
-        "\t Packets processed:           {} packets",
+        "\t Packets processed:                 {} packets",
         sstats.packets_processed
     );
+    if qlimit != DEFAULT_QLIMIT {
+        println!(
+            "\t Packets droppped:                  {} packets",
+            sstats.packets_dropped
+        );
+        println!(
+            "\t Packet loss probability:           {:.2}%",
+            f64::from(sstats.packets_dropped) / f64::from(cstats.packets_generated) * 100.0
+        );
+    }
     println!(
-        "\t Packets droppped:            {} packets",
-        sstats.packets_dropped
+        "\t Server idle proportion:            {:.2}%",
+        f64::from(sstats.idle_count) / f64::from(sstats.idle_count + sstats.process_count) * 100.0
     );
-    println!(
-        "\t Server idle proportion:      {:.2}%",
-        f64::from(sstats.idle_count) / f64::from(sstats.idle_count + sstats.packets_processed)
-    );
+    println!("\t Packets leftover in queue:         {}", leftovers);
 }
