@@ -1,7 +1,6 @@
 ## Running the simulations
 ```
-cargo build
-.\target\debug\qsim.exe
+cargo run --release -- <flags>
 ```
 ## Options
 ```
