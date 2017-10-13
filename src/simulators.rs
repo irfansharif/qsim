@@ -144,6 +144,7 @@ impl Server {
                     self.statistics.process_count += 1;
                     Some(p)
                 } else {
+                    self.statistics.process_count += 1;
                     None
                 }
             }

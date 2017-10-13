@@ -17,6 +17,7 @@ const DEFAULT_QLIMIT: Option<usize> = None;
 fn construct_options() -> Options {
     let mut opts = Options::new();
     opts.optflag("h", "help", "Display this message");
+    opts.optflag("r", "report", "Generate csv report data to stdout");
     opts.optopt(
         "",
         "rate",
@@ -89,6 +90,103 @@ fn print_usage(program: &str, opts: &Options) {
     print!("{}", opts.usage(&brief));
 }
 
+
+fn generate_report() {
+    let resolution = 1e6;
+    let pspeed = 1e6;
+    let psize = 2000;
+    let ticks = (resolution * 10.0) as u32;
+
+    // Question 2: M/D/1 with C = 1000000 bits/s and L = 2000 bits
+    println!("rho, E[N], E[T], P_idle");
+    for l in 0..8 {
+        let rho = 0.2 + f64::from(l) * 0.1;
+        let lambda = rho * pspeed / f64::from(psize);
+        for _ in 0..10 {
+            let mut client = Client::new(Markov::new(f64::from(lambda)), resolution);
+            let mut server = Server::new(resolution, pspeed, None);
+            let mut pstats = OnlineStats::new();
+            let mut qstats = OnlineStats::new();
+
+            for i in 0..ticks {
+                qstats.add(server.qlen());
+
+                if client.tick() {
+                    server.enqueue(Packet {
+                        time_generated: i,
+                        length: psize,
+                    });
+                }
+                if let Some(p) = server.tick() {
+                    // We record the time it took for the processed packet to get processed.
+                    pstats.add(f64::from(i - p.time_generated) / resolution);
+                }
+            }
+
+            let sstats = server.statistics;
+            let p_idle = f64::from(sstats.idle_count) /
+                f64::from(sstats.idle_count + sstats.process_count) *
+                100.0;
+            println!(
+                "{:.1}, {:.2}, {:.4}, {:.2}%",
+                rho,
+                qstats.mean(),
+                pstats.mean(),
+                p_idle
+            );
+        }
+    }
+    println!();
+
+    // Question 4: M/D/1/K with C = 1000000 bits/s and L = 2000 bits
+    let k_vals = [10usize, 25, 50];
+    println!("K, rho, E[N], E[T], P_idle, P_loss");
+    for n in &k_vals {
+        for l in 0..11 {
+            let rho = 0.5 + f64::from(l) * 0.1;
+            let lambda = rho * pspeed / f64::from(psize);
+            for _ in 0..10 {
+                let mut client = Client::new(Markov::new(f64::from(lambda)), resolution);
+                let mut server = Server::new(resolution, pspeed, Some(*n));
+                let mut pstats = OnlineStats::new();
+                let mut qstats = OnlineStats::new();
+
+                for i in 0..ticks {
+                    qstats.add(server.qlen());
+
+                    if client.tick() {
+                        server.enqueue(Packet {
+                            time_generated: i,
+                            length: psize,
+                        });
+                    }
+                    if let Some(p) = server.tick() {
+                        // We record the time it took for the processed packet to get processed.
+                        pstats.add(f64::from(i - p.time_generated) / resolution);
+                    }
+                }
+
+                let cstats = client.statistics;
+                let sstats = server.statistics;
+                let p_idle = f64::from(sstats.idle_count) /
+                    f64::from(sstats.idle_count + sstats.process_count) *
+                    100.0;
+                let p_loss = f64::from(sstats.packets_dropped) /
+                    f64::from(cstats.packets_generated) * 100.0;
+                println!(
+                    "{}, {:.1}, {:.2}, {:.4}, {:.2}%, {:.2}%",
+                    n,
+                    rho,
+                    qstats.mean(),
+                    pstats.mean(),
+                    p_idle,
+                    p_loss
+                );
+            }
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
@@ -104,6 +202,11 @@ fn main() {
 
     if matches.opt_present("h") {
         print_usage(&program, &opts);
+        return;
+    }
+
+    if matches.opt_present("r") {
+        generate_report();
         return;
     }
 
